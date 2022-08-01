@@ -2,14 +2,13 @@ package com.nesterova.springeshop.service;
 
 import com.nesterova.springeshop.dao.BucketRepository;
 import com.nesterova.springeshop.dao.ProductRepository;
-import com.nesterova.springeshop.domain.Bucket;
-import com.nesterova.springeshop.domain.Product;
-import com.nesterova.springeshop.domain.User;
+import com.nesterova.springeshop.domain.*;
 import com.nesterova.springeshop.dto.BucketDetailDto;
 import com.nesterova.springeshop.dto.BucketDto;
 import org.springframework.stereotype.Service;
 
 import javax.transaction.Transactional;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -22,17 +21,20 @@ public class BucketServiceImpl implements BucketService{
     private final BucketRepository bucketRepository;
     private final ProductRepository productRepository;
     private final UserService userService;
+    private final OrderService orderService;
 
     public BucketServiceImpl(BucketRepository bucketRepository,
                              ProductRepository productRepository,
-                             UserService userService) {
+                             UserService userService,
+                             OrderService orderService) {
         this.bucketRepository = bucketRepository;
         this.productRepository = productRepository;
         this.userService = userService;
+        this.orderService = orderService;
     }
 
     @Override
-    @Transactional
+    @javax.transaction.Transactional
     public Bucket createBucket(User user, List<Long> productIds) {
         Bucket bucket = new Bucket();
         bucket.setUser(user);
@@ -43,12 +45,12 @@ public class BucketServiceImpl implements BucketService{
 
     private List<Product> getCollectRefProductsByIds(List<Long> productIds) {
         return productIds.stream()
-                //getOne вытаскивает ссылку на объект, findById вытаскивает сам объект
                 .map(productRepository::getOne)
                 .collect(Collectors.toList());
     }
 
     @Override
+    @javax.transaction.Transactional
     public void addProducts(Bucket bucket, List<Long> productIds) {
         List<Product> products = bucket.getProducts();
         List<Product> newProductsList = products == null ? new ArrayList<>() : new ArrayList<>(products);
@@ -63,6 +65,7 @@ public class BucketServiceImpl implements BucketService{
         if(user == null || user.getBucket() == null){
             return new BucketDto();
         }
+
         BucketDto bucketDto = new BucketDto();
         Map<Long, BucketDetailDto> mapByProductId = new HashMap<>();
 
@@ -77,9 +80,46 @@ public class BucketServiceImpl implements BucketService{
                 detail.setSum(detail.getSum() + product.getPrice());
             }
         }
+
         bucketDto.setBucketDetails(new ArrayList<>(mapByProductId.values()));
         bucketDto.aggregate();
+
         return bucketDto;
     }
 
+    @Override
+    @Transactional
+    public void commitBucketToOrder(String username) {
+        User user = userService.findByName(username);
+        if(user == null){
+            throw new RuntimeException("User is not found");
+        }
+        Bucket bucket = user.getBucket();
+        if(bucket == null || bucket.getProducts().isEmpty()){
+            return;
+        }
+
+        Order order = new Order();
+        order.setStatus(OrderStatus.NEW);
+        order.setUser(user);
+
+        Map<Product, Long> productWithAmount = bucket.getProducts().stream()
+                .collect(Collectors.groupingBy(product -> product, Collectors.counting()));
+
+        List<OrderDetails> orderDetails = productWithAmount.entrySet().stream()
+                .map(pair -> new OrderDetails(order, pair.getKey(), pair.getValue()))
+                .collect(Collectors.toList());
+
+        BigDecimal total = new BigDecimal(orderDetails.stream()
+                .map(detail -> detail.getPrice().multiply(detail.getAmount()))
+                .mapToDouble(BigDecimal::doubleValue).sum());
+
+        order.setDetails(orderDetails);
+        order.setSum(total);
+        order.setAddress("none");
+
+        orderService.saveOrder(order);
+        bucket.getProducts().clear();
+        bucketRepository.save(bucket);
+    }
 }
