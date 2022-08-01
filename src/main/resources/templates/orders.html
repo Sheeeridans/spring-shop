@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.w3.org/1999/xhtml" xmlns:sec="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="UTF-8">
+  <title>User list</title>
+</head>
+<body>
+<div th:insert="~{fragments/menu :: #nav-menu}"></div>
+
+<table border="1">
+  <tr>
+    <td>Id</td>
+    <td>Created</td>
+    <td>Updated</td>
+    <td>User</td>
+    <td>Sum</td>
+  </tr>
+  <tr th:each="order : ${orders}">
+    <td th:text="${order.id}">Id</td>
+    <td th:text="${order.created}">Testname</td>
+    <td th:text="${order.updated}">Testname</td>
+    <td th:text="${order.user_id}">Testname</td>
+    <td th:text="${order.sum}">Testname</td>
+
+
+
+  </tr>
+</table>
+<a th:href="@{/users/new}">Add new</a>
+
+</body>
+</html>
