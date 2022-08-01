@@ -2,9 +2,11 @@ package com.nesterova.springeshop.service;
 
 import com.nesterova.springeshop.dao.ProductRepository;
 import com.nesterova.springeshop.domain.Bucket;
+import com.nesterova.springeshop.domain.Product;
 import com.nesterova.springeshop.domain.User;
 import com.nesterova.springeshop.dto.ProductDto;
 import com.nesterova.springeshop.mapper.ProductMapper;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import javax.transaction.Transactional;
@@ -17,13 +19,16 @@ public class ProductServiceImpl  implements ProductService{
     private final ProductRepository productRepository;
     private final UserService userService;
     private final BucketService bucketService;
+    private final SimpMessagingTemplate template;
 
     public ProductServiceImpl(ProductRepository productRepository,
                               UserService userService,
-                              BucketService bucketService) {
+                              BucketService bucketService,
+                              SimpMessagingTemplate template) {
         this.productRepository = productRepository;
         this.userService = userService;
         this.bucketService = bucketService;
+        this.template = template;
     }
 
     @Override
@@ -48,5 +53,15 @@ public class ProductServiceImpl  implements ProductService{
         else {
             bucketService.addProducts(bucket, Collections.singletonList(productId));
         }
+    }
+
+    @Override
+    @Transactional
+    public void addProduct(ProductDto dto) {
+        Product product = mapper.toProduct(dto);
+        Product savedProduct = productRepository.save(product);
+
+        template.convertAndSend("/topic/products",
+                ProductMapper.MAPPER.fromProduct(savedProduct));
     }
 }
